@@ -1,15 +1,27 @@
+import figlet from 'figlet';
 import inquirer from 'inquirer';
-import { 
-  fetchEmployees, 
-  fetchRoles, 
-  fetchDepartments, 
-  addEmployeeToDb, 
-  updateEmployeeRoleInDb, 
-  addRoleToDb, 
-  addDepartmentToDb, 
-  deleteEmployeeFromDb, // Include deleteEmployee function
-  deleteRoleFromDb // Include deleteRole function
-} from './dbService.js'; // Adjust this if you use CommonJS modules
+import {
+  fetchEmployees,
+  fetchRoles,
+  fetchDepartments,
+  addEmployeeToDb,
+  updateEmployeeRoleInDb,
+  addRoleToDb,
+  addDepartmentToDb,
+  deleteEmployeeFromDb,
+  deleteRoleFromDb
+} from './dbService.js';
+
+// Display ASCII art of "Employee Manager" at the start
+figlet('Employee Manager', function (err, data) {
+  if (err) {
+    console.log('Something went wrong...');
+    console.dir(err);
+    return;
+  }
+  console.log(data);
+  startCli(); // Start the CLI after displaying the art
+});
 
 // Define types for Employee, Role, and Department
 type Employee = {
@@ -223,10 +235,10 @@ async function startCli() {
         'View Employees',
         'Add Employee',
         'Update Employee Role',
-        'Delete Employee', // New option to delete employee
+        'Delete Employee',
         'View All Roles',
         'Add Role',
-        'Delete Role', // New option to delete role
+        'Delete Role',
         'View All Departments',
         'Add Department',
         'Quit'
@@ -268,6 +280,5 @@ async function startCli() {
   }
 }
 
-// Start the CLI
+// Start the CLI after displaying ASCII art
 console.log("Welcome to the Employee Tracker CLI");
-startCli();
