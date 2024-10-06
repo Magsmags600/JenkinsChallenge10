@@ -1,178 +1,91 @@
-import express from 'express';
-import { QueryResult } from 'pg';
-import { pool, connectToDb } from './connection.js';
+import inquirer from 'inquirer';
+import { fetchEmployees, fetchRoles, fetchDepartments } from './dbService'; // Assuming this is your service
 
-await connectToDb();
+// Function to display employees in table format
+async function viewEmployees() {
+  const employees = await fetchEmployees(); // Fetch employees from the database
+  console.log("\nList of Employees:");
+  console.log(
+    "ID".padEnd(5) +
+    "First Name".padEnd(15) +
+    "Last Name".padEnd(15) +
+    "Title".padEnd(25) +
+    "Department".padEnd(20) +
+    "Salary".padEnd(10) +
+    "Manager".padEnd(20)
+  );
+  console.log("-".repeat(110));  // Separator line
 
-const PORT = process.env.PORT || 3001;
-const app = express();
+  employees.forEach((employee) => {
+    const managerName = employee.manager_first_name && employee.manager_last_name
+      ? `${employee.manager_first_name} ${employee.manager_last_name}`
+      : "No Manager";
 
-// Express middleware
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
-
-// Create a new department
-app.post('/api/departments', ({ body }, res) => {
-  const sql = `INSERT INTO department (name) VALUES ($1) RETURNING *`;
-  const params = [body.name];
-
-  pool.query(sql, params, (err, result) => {
-    if (err) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    res.json({
-      message: 'success',
-      data: result.rows[0],
-    });
+    console.log(
+      `${employee.id.toString().padEnd(5)}` +
+      `${employee.first_name.padEnd(15)}` +
+      `${employee.last_name.padEnd(15)}` +
+      `${employee.title.padEnd(25)}` +
+      `${employee.department.padEnd(20)}` +
+      `$${employee.salary.toString().padEnd(10)}` +
+      `${managerName.padEnd(20)}`
+    );
   });
-});
+  startCli(); // Go back to CLI options
+}
 
-// Read all departments
-app.get('/api/departments', (_req, res) => {
-  const sql = `SELECT * FROM department`;
-
-  pool.query(sql, (err: Error, result: QueryResult) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    const { rows } = result;
-    res.json({
-      message: 'success',
-      data: rows,
-    });
+// Function to display roles
+async function viewRoles() {
+  const roles = await fetchRoles(); // Fetch roles from the database
+  console.log("\nList of Roles:");
+  roles.forEach((role, index) => {
+    console.log(`${index + 1}. ${role.title} (${role.department}) - $${role.salary}`);
   });
-});
+  startCli(); // Go back to CLI options
+}
 
-// Create a new role
-app.post('/api/roles', ({ body }, res) => {
-  const sql = `INSERT INTO role (title, salary, department_id) VALUES ($1, $2, $3) RETURNING *`;
-  const params = [body.title, body.salary, body.department_id];
-
-  pool.query(sql, params, (err, result) => {
-    if (err) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    res.json({
-      message: 'success',
-      data: result.rows[0],
-    });
+// Function to display departments
+async function viewDepartments() {
+  const departments = await fetchDepartments(); // Fetch departments from the database
+  console.log("\nList of Departments:");
+  departments.forEach((department, index) => {
+    console.log(`${index + 1}. ${department.name}`);
   });
-});
+  startCli(); // Go back to CLI options
+}
 
-// Read all roles
-app.get('/api/roles', (_req, res) => {
-  const sql = `
-    SELECT role.id, role.title, role.salary, department.name AS department
-    FROM role
-    JOIN department ON role.department_id = department.id
-  `;
-
-  pool.query(sql, (err: Error, result: QueryResult) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+// CLI Menu
+async function startCli() {
+  const { action } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'What would you like to do?',
+      choices: [
+        'View Employees',
+        'View All Roles',
+        'View All Departments',
+        'Quit'
+      ]
     }
-    const { rows } = result;
-    res.json({
-      message: 'success',
-      data: rows,
-    });
-  });
-});
+  ]);
 
-// Create a new employee
-app.post('/api/employees', ({ body }, res) => {
-  const sql = `INSERT INTO employee (first_name, last_name, role_id, manager_id) VALUES ($1, $2, $3, $4) RETURNING *`;
-  const params = [body.first_name, body.last_name, body.role_id, body.manager_id || null];
+  switch (action) {
+    case 'View Employees':
+      viewEmployees();
+      break;
+    case 'View All Roles':
+      viewRoles();
+      break;
+    case 'View All Departments':
+      viewDepartments();
+      break;
+    case 'Quit':
+      console.log('Exiting Employee Tracker CLI');
+      process.exit();
+  }
+}
 
-  pool.query(sql, params, (err, result) => {
-    if (err) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    res.json({
-      message: 'success',
-      data: result.rows[0],
-    });
-  });
-});
-
-// Read all employees
-app.get('/api/employees', (_req, res) => {
-  const sql = `
-    SELECT e.id, e.first_name, e.last_name, role.title AS job_title, 
-           department.name AS department, role.salary, 
-           CONCAT(m.first_name, ' ', m.last_name) AS manager
-    FROM employee e
-    JOIN role ON e.role_id = role.id
-    JOIN department ON role.department_id = department.id
-    LEFT JOIN employee m ON e.manager_id = m.id
-  `;
-
-  pool.query(sql, (err: Error, result: QueryResult) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    const { rows } = result;
-    res.json({
-      message: 'success',
-      data: rows,
-    });
-  });
-});
-
-// Update an employee's role
-app.put('/api/employees/:id/role', (req, res) => {
-  const sql = `UPDATE employee SET role_id = $1 WHERE id = $2 RETURNING *`;
-  const params = [req.body.role_id, req.params.id];
-
-  pool.query(sql, params, (err: Error, result: QueryResult) => {
-    if (err) {
-      res.status(400).json({ error: err.message });
-    } else if (!result.rowCount) {
-      res.json({
-        message: 'Employee not found',
-      });
-    } else {
-      res.json({
-        message: 'success',
-        data: result.rows[0],
-      });
-    }
-  });
-});
-
-// Delete an employee
-app.delete('/api/employees/:id', (req, res) => {
-  const sql = `DELETE FROM employee WHERE id = $1 RETURNING *`;
-  const params = [req.params.id];
-
-  pool.query(sql, params, (err: Error, result: QueryResult) => {
-    if (err) {
-      res.status(400).json({ error: err.message });
-    } else if (!result.rowCount) {
-      res.json({
-        message: 'Employee not found',
-      });
-    } else {
-      res.json({
-        message: 'deleted',
-        changes: result.rowCount,
-        data: result.rows[0],
-      });
-    }
-  });
-});
-
-// Default response for any other request (Not Found)
-app.use((_req, res) => {
-  res.status(404).end();
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Start the CLI
+console.log("Welcome to the Employee Tracker CLI");
+startCli();

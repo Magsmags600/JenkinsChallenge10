@@ -1,125 +1,271 @@
-import readline from 'readline';
+import inquirer from 'inquirer';
+import { 
+  fetchEmployees, 
+  fetchRoles, 
+  fetchDepartments, 
+  addEmployeeToDb, 
+  updateEmployeeRoleInDb, 
+  addRoleToDb, 
+  addDepartmentToDb, 
+  deleteEmployeeFromDb, // Include deleteEmployee function
+  deleteRoleFromDb // Include deleteRole function
+} from './dbService.js'; // Adjust this if you use CommonJS modules
 
-// Define types for Department, Role, and Employee
-type Department = {
-  name: string;
-};
-
-type Role = {
+// Define types for Employee, Role, and Department
+type Employee = {
+  id: number;
+  first_name: string;
+  last_name: string;
   title: string;
   salary: number;
-  department: Department;
+  department: string;
+  manager_first_name: string | null;
+  manager_last_name: string | null;
 };
 
-type Employee = {
-  firstName: string;
-  lastName: string;
-  role: Role;
-  manager: Employee | null;
-};
-
-// Employees, Roles, and Departments arrays
-const departments: Department[] = [];
-const roles: Role[] = [];
-const employees: Employee[] = [];
-
-// Create department instances
-const engineering: Department = { name: "Engineering" };
-const hr: Department = { name: "Human Resources" };
-const sales: Department = { name: "Sales" };
-
-// Add departments to array
-departments.push(engineering);
-departments.push(hr);
-departments.push(sales);
-
-// Create role instances
-const softwareEngineer: Role = { title: "Software Engineer", salary: 80000, department: engineering };
-const hrManager: Role = { title: "HR Manager", salary: 90000, department: hr };
-const salesRep: Role = { title: "Sales Representative", salary: 50000, department: sales };
-
-// Add roles to array
-roles.push(softwareEngineer);
-roles.push(hrManager);
-roles.push(salesRep);
-
-// Create employee instances
-const employee1: Employee = { firstName: "Alice", lastName: "Johnson", role: softwareEngineer, manager: null };
-const employee2: Employee = { firstName: "Bob", lastName: "Smith", role: hrManager, manager: null };
-const employee3: Employee = { firstName: "Charlie", lastName: "Brown", role: salesRep, manager: null };
-
-// Set managers (Bob is the manager of Alice)
-employee1.manager = employee2;
-
-// Add employees to array
-employees.push(employee1);
-employees.push(employee2);
-employees.push(employee3);
-
-// CLI Logic
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-// Function to display employees
-function viewEmployees() {
+// Function to display employees in table format
+async function viewEmployees() {
+  const employees: Employee[] = await fetchEmployees();
   console.log("\nList of Employees:");
-  employees.forEach((employee, index) => {
-    const managerName = employee.manager ? `${employee.manager.firstName} ${employee.manager.lastName}` : "No Manager";
+  console.log(
+    "ID".padEnd(5) +
+    "First Name".padEnd(15) +
+    "Last Name".padEnd(15) +
+    "Title".padEnd(25) +
+    "Department".padEnd(20) +
+    "Salary".padEnd(10) +
+    "Manager".padEnd(20)
+  );
+  console.log("-".repeat(110));
+
+  employees.forEach((employee: Employee) => {
+    const managerName = employee.manager_first_name && employee.manager_last_name
+      ? `${employee.manager_first_name} ${employee.manager_last_name}`
+      : "No Manager";
+
     console.log(
-      `${index + 1}. ${employee.firstName} ${employee.lastName} - ${employee.role.title}, ${employee.role.department.name} (Manager: ${managerName})`
+      `${employee.id.toString().padEnd(5)}` +
+      `${employee.first_name.padEnd(15)}` +
+      `${employee.last_name.padEnd(15)}` +
+      `${employee.title.padEnd(25)}` +
+      `${employee.department.padEnd(20)}` +
+      `$${employee.salary.toString().padEnd(10)}` +
+      `${managerName.padEnd(20)}`
+    );
+  });
+  startCli(); // Go back to CLI options
+}
+
+// Function to add an employee
+async function addEmployee() {
+  const roles = await fetchRoles();
+  const { firstName, lastName, roleIndex, managerName } = await inquirer.prompt([
+    { type: 'input', name: 'firstName', message: 'Enter first name:' },
+    { type: 'input', name: 'lastName', message: 'Enter last name:' },
+    {
+      type: 'list',
+      name: 'roleIndex',
+      message: 'Select a Role:',
+      choices: roles.map((role, index) => ({ name: `${role.title} (${role.department})`, value: index }))
+    },
+    { type: 'input', name: 'managerName', message: 'Enter manager (leave blank for none):' }
+  ]);
+
+  const selectedRole = roles[roleIndex];
+  await addEmployeeToDb(firstName, lastName, selectedRole.id, managerName);
+  console.log(`Employee ${firstName} ${lastName} added successfully!`);
+  viewEmployees();
+}
+
+// Function to update employee role
+async function updateEmployeeRole() {
+  const employees = await fetchEmployees();
+  const roles = await fetchRoles();
+  const { employeeIndex, roleIndex } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'employeeIndex',
+      message: 'Select an employee to update their role:',
+      choices: employees.map((employee, index) => ({ name: `${employee.first_name} ${employee.last_name}`, value: index }))
+    },
+    {
+      type: 'list',
+      name: 'roleIndex',
+      message: 'Select a new role for the employee:',
+      choices: roles.map((role, index) => ({ name: `${role.title} (${role.department})`, value: index }))
+    }
+  ]);
+
+  const selectedEmployee = employees[employeeIndex];
+  const selectedRole = roles[roleIndex];
+  await updateEmployeeRoleInDb(selectedEmployee.id, selectedRole.id);
+  console.log(`${selectedEmployee.first_name} ${selectedEmployee.last_name}'s role has been updated to ${selectedRole.title}.`);
+  startCli();
+}
+
+// Function to delete an employee
+async function deleteEmployee() {
+  const employees = await fetchEmployees();
+  const { employeeIndex } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'employeeIndex',
+      message: 'Select an employee to delete:',
+      choices: employees.map((employee, index) => ({ name: `${employee.first_name} ${employee.last_name}`, value: index }))
+    }
+  ]);
+
+  const selectedEmployee = employees[employeeIndex];
+  await deleteEmployeeFromDb(selectedEmployee.id);
+  console.log(`${selectedEmployee.first_name} ${selectedEmployee.last_name} has been deleted.`);
+  viewEmployees();
+}
+
+// Function to view roles in table format
+async function viewRoles() {
+  const roles = await fetchRoles();
+  console.log("\nList of Roles:");
+  console.log(
+    "ID".padEnd(5) +
+    "Title".padEnd(25) +
+    "Department".padEnd(20) +
+    "Salary".padEnd(10)
+  );
+  console.log("-".repeat(60));
+
+  roles.forEach((role) => {
+    console.log(
+      `${role.id.toString().padEnd(5)}` +
+      `${role.title.padEnd(25)}` +
+      `${role.department.padEnd(20)}` +
+      `$${role.salary.toString().padEnd(10)}`
     );
   });
   startCli();
 }
 
-// Function to add a new employee
-function addEmployee() {
-  rl.question("Enter first name: ", (firstName) => {
-    rl.question("Enter last name: ", (lastName) => {
-      console.log("\nSelect a Role:");
-      roles.forEach((role, index) => {
-        console.log(`${index + 1}. ${role.title} (${role.department.name})`);
-      });
-      rl.question("Select a role number: ", (roleIndex) => {
-        const selectedRole = roles[parseInt(roleIndex) - 1];
-        rl.question("Enter manager (leave blank for none): ", (managerName) => {
-          const manager = employees.find(emp => `${emp.firstName} ${emp.lastName}` === managerName) || null;
-          const newEmployee: Employee = { firstName, lastName, role: selectedRole, manager };
-          employees.push(newEmployee);
-          console.log(`Employee ${firstName} ${lastName} added successfully!`);
-          viewEmployees();
-        });
-      });
-    });
+// Function to add a role
+async function addRole() {
+  const departments = await fetchDepartments();
+  const { title, salary, departmentIndex } = await inquirer.prompt([
+    { type: 'input', name: 'title', message: 'Enter role title:' },
+    { type: 'input', name: 'salary', message: 'Enter role salary:' },
+    {
+      type: 'list',
+      name: 'departmentIndex',
+      message: 'Select a department for the role:',
+      choices: departments.map((department, index) => ({ name: department.name, value: index }))
+    }
+  ]);
+
+  const selectedDepartment = departments[departmentIndex];
+  await addRoleToDb(title, salary, selectedDepartment.id);
+  console.log(`Role ${title} added successfully to ${selectedDepartment.name} department.`);
+  viewRoles();
+}
+
+// Function to delete a role
+async function deleteRole() {
+  const roles = await fetchRoles();
+  const { roleIndex } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'roleIndex',
+      message: 'Select a role to delete:',
+      choices: roles.map((role, index) => ({ name: role.title, value: index }))
+    }
+  ]);
+
+  const selectedRole = roles[roleIndex];
+  await deleteRoleFromDb(selectedRole.id);
+  console.log(`Role ${selectedRole.title} has been deleted.`);
+  viewRoles();
+}
+
+// Function to view departments in table format
+async function viewDepartments() {
+  const departments = await fetchDepartments();
+  console.log("\nList of Departments:");
+  console.log(
+    "ID".padEnd(5) +
+    "Department Name".padEnd(25)
+  );
+  console.log("-".repeat(30));
+
+  departments.forEach((department) => {
+    console.log(
+      `${department.id.toString().padEnd(5)}` +
+      `${department.name.padEnd(25)}`
+    );
   });
+  startCli();
+}
+
+// Function to add a department
+async function addDepartment() {
+  const { name } = await inquirer.prompt([
+    { type: 'input', name: 'name', message: 'Enter department name:' }
+  ]);
+
+  await addDepartmentToDb(name);
+  console.log(`Department ${name} added successfully.`);
+  viewDepartments();
 }
 
 // CLI Menu
-function startCli() {
-  console.log("\nEmployee Tracker Menu:");
-  console.log("1. View Employees");
-  console.log("2. Add Employee");
-  console.log("3. Exit");
-  rl.question("\nSelect an option: ", (option) => {
-    switch (option) {
-      case "1":
-        viewEmployees();
-        break;
-      case "2":
-        addEmployee();
-        break;
-      case "3":
-        rl.close();
-        console.log("Exiting Employee Tracker CLI");
-        break;
-      default:
-        console.log("Invalid option, please try again.");
-        startCli();
-        break;
+async function startCli() {
+  const { action } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'What would you like to do?',
+      choices: [
+        'View Employees',
+        'Add Employee',
+        'Update Employee Role',
+        'Delete Employee', // New option to delete employee
+        'View All Roles',
+        'Add Role',
+        'Delete Role', // New option to delete role
+        'View All Departments',
+        'Add Department',
+        'Quit'
+      ]
     }
-  });
+  ]);
+
+  switch (action) {
+    case 'View Employees':
+      viewEmployees();
+      break;
+    case 'Add Employee':
+      addEmployee();
+      break;
+    case 'Update Employee Role':
+      updateEmployeeRole();
+      break;
+    case 'Delete Employee':
+      deleteEmployee();
+      break;
+    case 'View All Roles':
+      viewRoles();
+      break;
+    case 'Add Role':
+      addRole();
+      break;
+    case 'Delete Role':
+      deleteRole();
+      break;
+    case 'View All Departments':
+      viewDepartments();
+      break;
+    case 'Add Department':
+      addDepartment();
+      break;
+    case 'Quit':
+      console.log('Exiting Employee Tracker CLI');
+      process.exit();
+  }
 }
 
 // Start the CLI
