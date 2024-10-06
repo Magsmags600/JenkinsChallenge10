@@ -19,10 +19,35 @@ const pool = new Pool({
 const app = express();
 app.use(bodyParser.json());
 
-// Route to view all departments
-app.get('/api/departments', async (_req: Request, res: Response) => {
+/** --- Additional Functionalities --- **/
+
+// Update an employee's manager
+app.put('/api/employees/:id/manager', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { manager_id } = req.body;
   try {
-    const result = await pool.query('SELECT id, name FROM department');
+    const result = await pool.query(
+      'UPDATE employee SET manager_id = $1 WHERE id = $2 RETURNING *',
+      [manager_id, id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
+// View employees by manager
+app.get('/api/employees/manager/:manager_id', async (req: Request, res: Response) => {
+  const { manager_id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM employee WHERE manager_id = $1',
+      [manager_id]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -30,33 +55,17 @@ app.get('/api/departments', async (_req: Request, res: Response) => {
   }
 });
 
-// Route to view all roles
-app.get('/api/roles', async (_req: Request, res: Response) => {
+// View employees by department
+app.get('/api/employees/department/:department_id', async (req: Request, res: Response) => {
+  const { department_id } = req.params;
   try {
     const result = await pool.query(`
-      SELECT role.id, role.title, department.name AS department, role.salary
-      FROM role
-      JOIN department ON role.department_id = department.id
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Server Error');
-  }
-});
-
-// Route to view all employees
-app.get('/api/employees', async (_req: Request, res: Response) => {
-  try {
-    const result = await pool.query(`
-      SELECT e.id, e.first_name, e.last_name, role.title AS job_title, 
-             department.name AS department, role.salary, 
-             CONCAT(m.first_name, ' ', m.last_name) AS manager
+      SELECT e.id, e.first_name, e.last_name, role.title, department.name AS department
       FROM employee e
       JOIN role ON e.role_id = role.id
       JOIN department ON role.department_id = department.id
-      LEFT JOIN employee m ON e.manager_id = m.id
-    `);
+      WHERE department.id = $1
+    `, [department_id]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -64,61 +73,67 @@ app.get('/api/employees', async (_req: Request, res: Response) => {
   }
 });
 
-// Route to add a department
-app.post('/api/departments', async (req: Request, res: Response) => {
-  const { name } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO department (name) VALUES ($1) RETURNING *',
-      [name]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Server Error');
-  }
-});
-
-// Route to add a role
-app.post('/api/roles', async (req: Request, res: Response) => {
-  const { title, salary, department_id } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO role (title, salary, department_id) VALUES ($1, $2, $3) RETURNING *',
-      [title, salary, department_id]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Server Error');
-  }
-});
-
-// Route to add an employee
-app.post('/api/employees', async (req: Request, res: Response) => {
-  const { first_name, last_name, role_id, manager_id } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO employee (first_name, last_name, role_id, manager_id) VALUES ($1, $2, $3, $4) RETURNING *',
-      [first_name, last_name, role_id, manager_id]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Server Error');
-  }
-});
-
-// Route to update an employee role
-app.put('/api/employees/:id/role', async (req: Request, res: Response) => {
+// Delete a department
+app.delete('/api/departments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { role_id } = req.body;
   try {
-    const result = await pool.query(
-      'UPDATE employee SET role_id = $1 WHERE id = $2 RETURNING *',
-      [role_id, id]
-    );
-    res.json(result.rows[0]);
+    const result = await pool.query('DELETE FROM department WHERE id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+    res.json({ message: 'Department deleted successfully', data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
+// Delete a role
+app.delete('/api/roles/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM role WHERE id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Role not found' });
+    }
+    res.json({ message: 'Role deleted successfully', data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
+// Delete an employee
+app.delete('/api/employees/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM employee WHERE id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+    res.json({ message: 'Employee deleted successfully', data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
+// View total utilized budget of a department
+app.get('/api/departments/:id/budget', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT department.name, SUM(role.salary) AS total_budget
+      FROM employee
+      JOIN role ON employee.role_id = role.id
+      JOIN department ON role.department_id = department.id
+      WHERE department.id = $1
+      GROUP BY department.name
+    `, [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+    res.json({ department: result.rows[0].name, total_budget: result.rows[0].total_budget });
   } catch (err) {
     console.error(err);
     res.status(500).send('Server Error');
